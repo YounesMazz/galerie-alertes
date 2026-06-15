@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pièces jointes – Alerte</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  #header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  #alerte-label {
+    font-size: 13px;
+    color: #555;
+    font-weight: 500;
+    background: #fff;
+    border: 1px solid #dde1e7;
+    border-radius: 6px;
+    padding: 6px 12px;
+  }
+
+  #count {
+    font-size: 12px;
+    color: #888;
+    margin-left: auto;
+  }
+
+  /* Grille */
+  #gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .thumb {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e0e4ea;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .thumb:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  }
+
+  .thumb img {
+    width: 100%;
+    flex: 1;
+    object-fit: cover;
+    display: block;
+  }
+
+  .thumb .name {
+    font-size: 11px;
+    color: #555;
+    padding: 6px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  /* Fichier non-image */
+  .thumb.file-icon {
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    aspect-ratio: 1;
+  }
+
+  .thumb.file-icon .icon {
+    font-size: 40px;
+  }
+
+  .thumb.file-icon .name {
+    border-top: none;
+    text-align: center;
+    white-space: normal;
+    word-break: break-all;
+  }
+
+  /* État vide / erreur / chargement */
+  #state {
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+    padding: 60px 20px;
+    display: none;
+  }
+
+  #state.visible { display: block; }
+
+  #spinner {
+    width: 36px; height: 36px;
+    border: 3px solid #dde1e7;
+    border-top-color: #4a6cf7;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin: 0 auto 14px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Lightbox */
+  #lightbox {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.85);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+  }
+
+  #lightbox.open { display: flex; }
+
+  #lb-img {
+    max-width: 90vw;
+    max-height: 80vh;
+    border-radius: 6px;
+    object-fit: contain;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
+  }
+
+  #lb-name {
+    color: #ccc;
+    font-size: 13px;
+  }
+
+  #lb-close {
+    position: fixed;
+    top: 16px; right: 20px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    line-height: 1;
+    background: none;
+    border: none;
+    opacity: .8;
+  }
+
+  #lb-close:hover { opacity: 1; }
+
+  #lb-nav {
+    display: flex;
+    gap: 16px;
+  }
+
+  #lb-nav button {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    color: #fff;
+    border-radius: 6px;
+    padding: 8px 20px;
+    cursor: pointer;
+    font-size: 20px;
+    transition: background .15s;
+  }
+
+  #lb-nav button:hover { background: rgba(255,255,255,.25); }
+  #lb-nav button:disabled { opacity: .3; cursor: default; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <span id="alerte-label">Chargement…</span>
+  <span id="count"></span>
+</div>
+
+<div id="state">
+  <div id="spinner"></div>
+  <div id="state-msg">Chargement des pièces jointes…</div>
+</div>
+
+<div id="gallery"></div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <button id="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lb-img" src="" alt="">
+  <div id="lb-name"></div>
+  <div id="lb-nav">
+    <button id="lb-prev" onclick="navLightbox(-1)">‹</button>
+    <button id="lb-next" onclick="navLightbox(1)">›</button>
+  </div>
+</div>
+
+<script>
+  const API_BASE   = 'https://table.pingflow.io/api';
+  const TOKEN      = 'S4yQFAoFdI9ufd8vZVhGecSOzQYRLiKa';
+  const TABLE_ID   = '727843';
+  const FIELD_NAME = 'Pièces jointes';
+
+  // Récupère l'alerte_id depuis l'URL (?alerte_id=42)
+  const params   = new URLSearchParams(window.location.search);
+  const alerteId = params.get('alerte_id');
+
+  let images = [];   // liste des fichiers image pour le lightbox
+  let lbIndex = 0;
+
+  const stateEl   = document.getElementById('state');
+  const stateMsg  = document.getElementById('state-msg');
+  const gallery   = document.getElementById('gallery');
+  const labelEl   = document.getElementById('alerte-label');
+  const countEl   = document.getElementById('count');
+
+  function showState(msg, keepSpinner = false) {
+    stateEl.classList.add('visible');
+    stateMsg.textContent = msg;
+    document.getElementById('spinner').style.display = keepSpinner ? 'block' : 'none';
+  }
+
+  function hideState() {
+    stateEl.classList.remove('visible');
+    document.getElementById('spinner').style.display = 'block';
+  }
+
+  function isImage(mime) {
+    return mime && mime.startsWith('image/');
+  }
+
+  function fileIcon(mime) {
+    if (!mime) return '📎';
+    if (mime.includes('pdf')) return '📄';
+    if (mime.includes('word') || mime.includes('document')) return '📝';
+    if (mime.includes('sheet') || mime.includes('excel')) return '📊';
+    if (mime.includes('video')) return '🎬';
+    if (mime.includes('zip') || mime.includes('rar')) return '🗜️';
+    return '📎';
+  }
+
+  async function loadAlerte() {
+    if (!alerteId) {
+      showState('Aucune alerte sélectionnée.\nAjoute ?alerte_id=ID dans l\'URL.');
+      return;
+    }
+
+    showState('Chargement…', true);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/database/rows/table/${TABLE_ID}/${alerteId}/?user_field_names=true`,
+        { headers: { Authorization: `Token ${TOKEN}` } }
+      );
+
+      if (!res.ok) {
+        showState(`Erreur ${res.status} : alerte introuvable.`);
+        return;
+      }
+
+      const row = await res.json();
+
+      // Nom de l'alerte (essaie plusieurs champs courants)
+      const nom = row['Nom'] || row['Titre'] || row['Alerte'] || row['Name'] || `Alerte #${alerteId}`;
+      labelEl.textContent = `📋 ${nom}`;
+
+      const fichiers = row[FIELD_NAME] || [];
+
+      if (!fichiers.length) {
+        hideState();
+        showState('Aucune pièce jointe pour cette alerte.');
+        return;
+      }
+
+      hideState();
+      renderGallery(fichiers);
+
+    } catch (e) {
+      showState('Erreur de connexion à l\'API Baserow.');
+      console.error(e);
+    }
+  }
+
+  function renderGallery(fichiers) {
+    images = fichiers.filter(f => isImage(f.mime_type));
+    countEl.textContent = `${fichiers.length} fichier${fichiers.length > 1 ? 's' : ''}`;
+
+    fichiers.forEach((f, idx) => {
+      const div = document.createElement('div');
+
+      if (isImage(f.mime_type)) {
+        const imgIdx = images.indexOf(f);
+        div.className = 'thumb';
+        div.onclick = () => openLightbox(imgIdx);
+        div.innerHTML = `
+          <img src="${f.thumbnails?.small?.url || f.url}" alt="${f.name}" loading="lazy">
+          <div class="name" title="${f.name}">${f.name}</div>
+        `;
+      } else {
+        div.className = 'thumb file-icon';
+        div.onclick = () => window.open(f.url, '_blank');
+        div.innerHTML = `
+          <div class="icon">${fileIcon(f.mime_type)}</div>
+          <div class="name">${f.name}</div>
+        `;
+      }
+
+      gallery.appendChild(div);
+    });
+  }
+
+  // ── Lightbox ──
+  function openLightbox(idx) {
+    lbIndex = idx;
+    updateLightbox();
+    document.getElementById('lightbox').classList.add('open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+  }
+
+  function navLightbox(dir) {
+    lbIndex = Math.max(0, Math.min(images.length - 1, lbIndex + dir));
+    updateLightbox();
+  }
+
+  function updateLightbox() {
+    const f = images[lbIndex];
+    document.getElementById('lb-img').src  = f.url;
+    document.getElementById('lb-name').textContent = f.name;
+    document.getElementById('lb-prev').disabled = lbIndex === 0;
+    document.getElementById('lb-next').disabled = lbIndex === images.length - 1;
+  }
+
+  // Fermer lightbox avec Echap / flèches clavier
+  document.addEventListener('keydown', e => {
+    if (!document.getElementById('lightbox').classList.contains('open')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft')  navLightbox(-1);
+    if (e.key === 'ArrowRight') navLightbox(1);
+  });
+
+  // Fermer en cliquant hors de l'image
+  document.getElementById('lightbox').addEventListener('click', e => {
+    if (e.target === document.getElementById('lightbox')) closeLightbox();
+  });
+
+  loadAlerte();
+</script>
+</body>
+</html>
