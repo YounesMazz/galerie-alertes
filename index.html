@@ -40,8 +40,8 @@
   /* Grille */
   #gallery {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
   }
 
   .thumb {
@@ -213,9 +213,7 @@
   const TABLE_ID   = '727843';
   const FIELD_NAME = 'Pièces jointes';
 
-  // Récupère l'alerte_id depuis l'URL (?alerte_id=42)
-  const params   = new URLSearchParams(window.location.search);
-  const alerteId = params.get('alerte_id');
+  const alerteId = AlerteID;
 
   let images = [];   // liste des fichiers image pour le lightbox
   let lbIndex = 0;
@@ -239,6 +237,11 @@
 
   function isImage(mime) {
     return mime && mime.startsWith('image/');
+  }
+
+  // Baserow renvoie "name" (nom technique avec hash) et "visible_name" (nom original lisible)
+  function cleanName(f) {
+    return f.visible_name || f.name || 'fichier';
   }
 
   function fileIcon(mime) {
@@ -299,21 +302,24 @@
 
     fichiers.forEach((f, idx) => {
       const div = document.createElement('div');
+      const displayName = cleanName(f);
 
       if (isImage(f.mime_type)) {
         const imgIdx = images.indexOf(f);
         div.className = 'thumb';
         div.onclick = () => openLightbox(imgIdx);
+        // On utilise la miniature "card_cover" (plus grande résolution) si dispo, sinon le fichier original
+        const thumbUrl = f.thumbnails?.card_cover?.url || f.thumbnails?.large?.url || f.url;
         div.innerHTML = `
-          <img src="${f.thumbnails?.small?.url || f.url}" alt="${f.name}" loading="lazy">
-          <div class="name" title="${f.name}">${f.name}</div>
+          <img src="${thumbUrl}" alt="${displayName}" loading="lazy">
+          <div class="name" title="${displayName}">${displayName}</div>
         `;
       } else {
         div.className = 'thumb file-icon';
         div.onclick = () => window.open(f.url, '_blank');
         div.innerHTML = `
           <div class="icon">${fileIcon(f.mime_type)}</div>
-          <div class="name">${f.name}</div>
+          <div class="name">${displayName}</div>
         `;
       }
 
@@ -340,7 +346,7 @@
   function updateLightbox() {
     const f = images[lbIndex];
     document.getElementById('lb-img').src  = f.url;
-    document.getElementById('lb-name').textContent = f.name;
+    document.getElementById('lb-name').textContent = cleanName(f);
     document.getElementById('lb-prev').disabled = lbIndex === 0;
     document.getElementById('lb-next').disabled = lbIndex === images.length - 1;
   }
