@@ -211,6 +211,9 @@
   <button id="lb-close" onclick="closeLightbox()">✕</button>
   <img id="lb-img" src="" alt="">
   <iframe id="lb-pdf" src="" style="display:none"></iframe>
+  <a id="lb-pdf-fallback" href="#" target="_blank" style="display:none; color:#9cf; font-size:12px;">
+    Le PDF ne s'affiche pas ? Ouvrir dans un nouvel onglet
+  </a>
   <div id="lb-name"></div>
   <div id="lb-nav">
     <button id="lb-prev" onclick="navLightbox(-1)">‹</button>
@@ -375,6 +378,7 @@
   function closeLightbox() {
     document.getElementById('lightbox').classList.remove('open');
     document.getElementById('lb-pdf').src = ''; // évite de garder le PDF chargé inutilement en mémoire
+    document.getElementById('lb-pdf-fallback').style.display = 'none';
   }
 
   function navLightbox(dir) {
@@ -391,8 +395,16 @@
       imgEl.style.display = 'none';
       imgEl.src = '';
       pdfEl.style.display = 'block';
-      pdfEl.src = f.url;
+      // On passe par le viewer Google Docs : il charge lui-même le PDF puis l'affiche,
+      // ce qui évite les blocages "iframe dans iframe" (Pingview -> Baserow -> notre page -> PDF)
+      // qui surviennent quand le PDF est affiché directement dans une iframe imbriquée.
+      pdfEl.src = `https://docs.google.com/viewer?url=${encodeURIComponent(f.url)}&embedded=true`;
+
+      const fallback = document.getElementById('lb-pdf-fallback');
+      fallback.href = f.url;
+      fallback.style.display = 'inline-block';
     } else {
+      document.getElementById('lb-pdf-fallback').style.display = 'none';
       pdfEl.style.display = 'none';
       pdfEl.src = '';
       imgEl.style.display = 'block';
