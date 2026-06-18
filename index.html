@@ -222,8 +222,10 @@
 </div>
 
 <script>
-  const API_BASE   = 'https://table.pingflow.io/api';
-  const TOKEN      = 'S4yQFAoFdI9ufd8vZVhGecSOzQYRLiKa';
+  // Le navigateur ne parle plus jamais directement à Baserow : il passe par
+  // un Worker Cloudflare qui détient le token côté serveur (jamais visible ici).
+  // Remplace l'URL ci-dessous par celle de TON Worker une fois déployé.
+  const PROXY_URL = 'https://baserow-galeries-proxy.ymazouz.workers.dev';
   const TABLE_ID   = '727843';
   const FIELD_NAME = 'Pièces jointes';
 
@@ -294,8 +296,7 @@
 
     try {
       const res = await fetch(
-        `${API_BASE}/database/rows/table/${TABLE_ID}/${alerteId}/?user_field_names=true`,
-        { headers: { Authorization: `Token ${TOKEN}` } }
+        `${PROXY_URL}/?table_id=${TABLE_ID}&row_id=${alerteId}`
       );
 
       if (!res.ok) {
